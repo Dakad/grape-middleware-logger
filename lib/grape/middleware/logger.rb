@@ -127,7 +127,7 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
   end
 
   def reset_log!
-    @log = { render_json: @is_render_json }
+    @log = { render_json: @is_render_json, condensed: @options[:condensed], filter: @options[:filter] }
   end
 end
 
