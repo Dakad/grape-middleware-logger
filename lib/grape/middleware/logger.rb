@@ -7,7 +7,7 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
   attr_reader :logger
 
   class << self
-    attr_accessor :logger, :filter, :headers, :condensed
+    attr_accessor :logger, :filter, :headers, :condensed, :logs
 
     def default_logger
       default = Logger.new(STDOUT)
@@ -22,25 +22,24 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
     @options[:headers] ||= self.class.headers
     @options[:condensed] ||= false
     @logger = options[:logger] || self.class.logger || self.class.default_logger
+    @is_render_json = options[:is_render_json] || false
+    reset_log!
   end
 
   def before
-    start_time
-    # sets env['grape.*']
+    reset_log! # Reset log object
+
     super
 
-    log_statements = [
-      '',
-      %Q(Started %s "%s" at %s) % [
-        env[Grape::Env::GRAPE_REQUEST].request_method,
-        env[Grape::Env::GRAPE_REQUEST].path,
-        start_time.to_s
-      ],
-      %Q(Processing by #{processed_by}),
-      %Q(  Parameters: #{parameters})]
-
-    log_statements.append(%Q(  Headers: #{headers})) if @options[:headers]
-    log_info(log_statements)
+    @log = {
+      start_time: start_time,
+      remote_ip: env[Grape::Env::GRAPE_REQUEST].env['REMOTE_ADDR'],
+      request_method: env[Grape::Env::GRAPE_REQUEST].request_method,
+      path: env[Grape::Env::GRAPE_REQUEST].path,
+      processed: processed_by,
+      parameters: parameters,
+    }
+    @log[:headers] = headers if @options[:headers]
   end
 
   # @note Error and exception handling are required for the +after+ hooks
@@ -62,19 +61,16 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
       after_failure(error)
       throw(:error, error)
     else
-      status, _, _ = *@app_response
-      after(status)
+      after
     end
     @app_response
   end
 
   def after(status)
-    log_info(
-      [
-        "Completed #{status} in #{((Time.now - start_time) * 1000).round(2)}ms",
-        ''
-      ]
-    )
+    @log[:status] = status
+    @log[:end_time] = Time.now
+    env['grape.middleware.logger'] = @logger
+    env['grape.middleware.log'] = @log
   end
 
   #
@@ -82,13 +78,13 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
   #
 
   def after_exception(e)
-    logger.info %Q(  #{e.class.name}: #{e.message})
-    after(500)
+    @log[:exception] = %Q(#{e.class.name}: #{e.message})
+    after
   end
 
   def after_failure(error)
-    logger.info %Q(  Error: #{error[:message]}) if error[:message]
-    after(error[:status])
+    @log[:message] = error[:message] if error[:message]
+    after
   end
 
   def parameters
@@ -130,13 +126,11 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
     endpoint.options[:for].to_s << result.join(BACKSLASH)
   end
 
-  def log_info(log_statements=[])
-    if @options[:condensed]
-      logger.info log_statements.compact.delete_if(&:empty?).each(&:strip!).join(" - ")
-    else
-      log_statements.each { |log_statement| logger.info log_statement }
-    end
+  def reset_log!
+    @log = { render_json: @is_render_json }
   end
 end
 
 require_relative 'logger/railtie' if defined?(Rails)
+
+require_relative 'logger/rack_head_override' if defined?(Rack::Head)
