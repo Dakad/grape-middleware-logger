@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name          = 'grape-middleware-logger'
-  spec.version       = '1.9.0'
+  spec.version       = '1.12.0'
   spec.platform      = Gem::Platform::RUBY
   spec.authors       = ['Ryan Buckley']
   spec.email         = ['arebuckley@gmail.com']
@@ -25,9 +25,7 @@ Grape::Middleware::Logger 1.7+ should be mounted with +insert_after+ to properly
   }
 
   spec.add_dependency 'grape', '>= 0.17'
-
-  spec.add_development_dependency 'bundler', '~> 1.7'
   spec.add_development_dependency 'mime-types', '~> 2'
-  spec.add_development_dependency 'rake', '~> 10.0'
+  spec.add_development_dependency 'rake', '>= 12.3.3'
   spec.add_development_dependency 'rspec', '>= 3.2', '< 4'
 end

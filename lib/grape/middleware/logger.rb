@@ -36,6 +36,7 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
     super
     @options[:filter] ||= self.class.filter
     @options[:headers] ||= self.class.headers
+    @options[:condensed] ||= false
     @logger = options[:logger] || self.class.logger || self.class.default_logger
     @log_sanitizer = options[:log_sanitizer] || Proc.new { |v| k.to_s =~ /password/ ? '[password]' : v }
     @is_render_json = options[:is_render_json] || false
@@ -47,37 +48,6 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
 
     super
 
-    @log.merge!({
-      start_time: start_time,
-      request_method: env[Grape::Env::GRAPE_REQUEST].request_method,
-      path: env[Grape::Env::GRAPE_REQUEST].path,
-      processed: processed_by,
-      parameters: parameters,
-      remote_ip: env[Grape::Env::GRAPE_REQUEST].env['REMOTE_ADDR'],
-    })
-    @log[:headers] = headers if @options[:headers]
-    @log[:trace_id] = env['trace_id']
-
-    logger = @logger
-    log_sanitizer = @log_sanitizer
-    log = self.class.sanitize(@log, &log_sanitizer)
-
-    unless log[:render_json]
-      logger.info ''
-      logger.info %Q(Started %s "%s" at %s) % [
-        log[:request_method],
-        log[:path],
-        log[:start_time].to_s
-      ]
-      logger.info %Q(Processing by #{log[:processed]})
-      logger.info %Q(  Parameters: #{log[:parameters]})
-      logger.info %Q(  Headers: #{log[:headers]}) if log[:headers].present?
-      logger.info %Q(  Remote IP: #{log[:remote_ip]})
-      logger.info %Q(  Trace ID: #{log[:trace_id]})
-      logger.info ''
-    else
-      logger.info log.to_json
-    end
   end
 
   # @note Error and exception handling are required for the +after+ hooks
@@ -107,7 +77,7 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
     @app_response
   end
 
-  def after
+  def after# (status)
     @log[:end_time] = Time.now
     env['grape.middleware.logger'] = @logger
     env['grape.middleware.log'] = @log
@@ -167,8 +137,16 @@ class Grape::Middleware::Logger < Grape::Middleware::Globals
     endpoint.options[:for].to_s << result.join(BACKSLASH)
   end
 
-  def reset_log!
-    @log = { render_json: @is_render_json }
+  # def reset_log!
+  #  @log = { render_json: @is_render_json }
+  # end
+
+  def log_info(log_statements=[])
+    if @options[:condensed]
+      logger.info log_statements.compact.delete_if(&:empty?).each(&:strip!).join(" - ")
+    else
+      log_statements.each { |log_statement| logger.info log_statement }
+    end
   end
 end
 
